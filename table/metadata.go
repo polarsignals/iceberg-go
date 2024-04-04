@@ -325,7 +325,7 @@ func (c *commonMetadata) validate() error {
 func (c *commonMetadata) Version() int { return c.FormatVersion }
 
 type MetadataV1 struct {
-	Schema    iceberg.Schema           `json:"schema"`
+	Schema    *iceberg.Schema          `json:"schema"`
 	Partition []iceberg.PartitionField `json:"partition-spec"`
 
 	commonMetadata
@@ -333,7 +333,7 @@ type MetadataV1 struct {
 
 func (m *MetadataV1) preValidate() {
 	if len(m.SchemaList) == 0 {
-		m.SchemaList = []*iceberg.Schema{&m.Schema}
+		m.SchemaList = []*iceberg.Schema{m.Schema}
 	}
 
 	if len(m.Specs) == 0 {

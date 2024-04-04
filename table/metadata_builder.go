@@ -12,7 +12,7 @@ type MetadataV1Builder struct {
 // NewMetadataV1Builder returns a new MetadataV1Builder.
 func NewMetadataV1Builder(
 	location string,
-	schema iceberg.Schema, // TODO: get a copyable schema
+	schema *iceberg.Schema,
 	lastUpdatesMs int64,
 	lastColumnId int,
 ) *MetadataV1Builder {
