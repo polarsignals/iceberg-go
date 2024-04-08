@@ -25,6 +25,61 @@ type hive struct {
 	bucket objstore.Bucket
 }
 
+func (h *hive) ListTables(ctx context.Context, namespace table.Identifier) ([]table.Identifier, error) {
+	if len(namespace) != 1 {
+		return nil, fmt.Errorf("hive catalog only supports listing tables in a single namespace")
+	}
+
+	ns := namespace[0]
+	tables := []table.Identifier{}
+	h.bucket.Iter(ctx, ns, func(name string) error {
+		tables = append(tables, table.Identifier{name})
+		return nil
+	})
+
+	return tables, nil
+}
+
+func (h *hive) DropTable(ctx context.Context, identifier table.Identifier) error {
+	ns, tbl, err := splitIdentForPath(identifier)
+	if err != nil {
+		return err
+	}
+
+	// Drop the table's directory.
+	return h.bucket.Delete(ctx, filepath.Join(ns, tbl))
+}
+
+func (h *hive) RenameTable(ctx context.Context, from, to table.Identifier) error {
+	return fmt.Errorf("hive catalog does not support renaming tables")
+}
+
+func (h *hive) ListNamespaces(ctx context.Context) ([]table.Identifier, error) {
+	namespaces := []table.Identifier{}
+	h.bucket.Iter(ctx, "", func(name string) error {
+		namespaces = append(namespaces, table.Identifier{name})
+		return nil
+	})
+
+	return namespaces, nil
+}
+
+func (h *hive) CreateNamespace(ctx context.Context, namespace table.Identifier, _ iceberg.Properties) error {
+	return fmt.Errorf("hive catalog does not support creating namespaces")
+}
+
+func (h *hive) DropNamespace(ctx context.Context, namespace table.Identifier) error {
+	return fmt.Errorf("hive catalog does not support dropping namespaces")
+}
+
+func (h *hive) LoadNamespaceProperties(ctx context.Context, namespace table.Identifier) (iceberg.Properties, error) {
+	return nil, fmt.Errorf("hive catalog does not support loading namespace properties")
+}
+
+func (h *hive) UpdateNamespaceProperties(ctx context.Context, namespace table.Identifier, _ iceberg.Properties) error {
+	return fmt.Errorf("hive catalog does not support updating namespace properties")
+}
+
 func (h *hive) LoadTable(ctx context.Context, identifier table.Identifier, _ iceberg.Properties) (*table.Table, error) {
 	ns, tbl, err := splitIdentForPath(identifier)
 	if err != nil {
