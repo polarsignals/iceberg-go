@@ -571,6 +571,19 @@ type colMap[K, V any] struct {
 	Value V `avro:"value"`
 }
 
+// TODO(thor) revisit this I had copilot write it
+func avroColMapFromMap[K comparable, V any](m map[K]V) *[]colMap[K, V] {
+	if m == nil {
+		return nil
+	}
+
+	out := make([]colMap[K, V], 0, len(m))
+	for k, v := range m {
+		out = append(out, colMap[K, V]{Key: k, Value: v})
+	}
+	return &out
+}
+
 func avroColMapToMap[K comparable, V any](c *[]colMap[K, V]) map[K]V {
 	if c == nil {
 		return nil
