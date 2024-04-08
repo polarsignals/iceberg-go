@@ -1,9 +1,9 @@
 package catalog
 
 import (
+	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strconv"
 
@@ -25,6 +25,14 @@ type hive struct {
 	bucket objstore.Bucket
 }
 
+func NewHive(bucket objstore.Bucket) Catalog {
+	return &hive{bucket: bucket}
+}
+
+func (h *hive) CatalogType() CatalogType {
+	return Hive
+}
+
 func (h *hive) ListTables(ctx context.Context, namespace table.Identifier) ([]table.Identifier, error) {
 	if len(namespace) != 1 {
 		return nil, fmt.Errorf("hive catalog only supports listing tables in a single namespace")
@@ -33,7 +41,7 @@ func (h *hive) ListTables(ctx context.Context, namespace table.Identifier) ([]ta
 	ns := namespace[0]
 	tables := []table.Identifier{}
 	h.bucket.Iter(ctx, ns, func(name string) error {
-		tables = append(tables, table.Identifier{name})
+		tables = append(tables, table.Identifier{filepath.Base(name)})
 		return nil
 	})
 
@@ -50,18 +58,16 @@ func (h *hive) DropTable(ctx context.Context, identifier table.Identifier) error
 	return h.bucket.Delete(ctx, filepath.Join(ns, tbl))
 }
 
-func (h *hive) RenameTable(ctx context.Context, from, to table.Identifier) error {
-	return fmt.Errorf("hive catalog does not support renaming tables")
+func (h *hive) RenameTable(ctx context.Context, from, to table.Identifier) (*table.Table, error) {
+	return nil, fmt.Errorf("hive catalog does not support renaming tables")
 }
 
-func (h *hive) ListNamespaces(ctx context.Context) ([]table.Identifier, error) {
+func (h *hive) ListNamespaces(ctx context.Context, parent table.Identifier) ([]table.Identifier, error) {
 	namespaces := []table.Identifier{}
-	h.bucket.Iter(ctx, "", func(name string) error {
-		namespaces = append(namespaces, table.Identifier{name})
+	return namespaces, h.bucket.Iter(ctx, "", func(name string) error {
+		namespaces = append(namespaces, table.Identifier{filepath.Base(name)})
 		return nil
 	})
-
-	return namespaces, nil
 }
 
 func (h *hive) CreateNamespace(ctx context.Context, namespace table.Identifier, _ iceberg.Properties) error {
@@ -76,8 +82,8 @@ func (h *hive) LoadNamespaceProperties(ctx context.Context, namespace table.Iden
 	return nil, fmt.Errorf("hive catalog does not support loading namespace properties")
 }
 
-func (h *hive) UpdateNamespaceProperties(ctx context.Context, namespace table.Identifier, _ iceberg.Properties) error {
-	return fmt.Errorf("hive catalog does not support updating namespace properties")
+func (h *hive) UpdateNamespaceProperties(ctx context.Context, namespace table.Identifier, removals []string, updates iceberg.Properties) (PropertiesUpdateSummary, error) {
+	return PropertiesUpdateSummary{}, fmt.Errorf("hive catalog does not support updating namespace properties")
 }
 
 func (h *hive) LoadTable(ctx context.Context, identifier table.Identifier, _ iceberg.Properties) (*table.Table, error) {
@@ -136,12 +142,11 @@ func getTableVersion(ctx context.Context, bucket objstore.Bucket, ns, tbl string
 	}
 	defer r.Close()
 
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return -1, fmt.Errorf("failed to read version hint: %w", err)
-	}
+	scanner := bufio.NewScanner(r)
+	scanner.Scan()
+	b := scanner.Text()
 
-	v, err := strconv.Atoi(string(b))
+	v, err := strconv.Atoi(b)
 	if err != nil {
 		return -1, fmt.Errorf("failed to parse version hint: %w", err)
 	}
