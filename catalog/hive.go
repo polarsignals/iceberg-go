@@ -64,8 +64,8 @@ func (h *hive) RenameTable(ctx context.Context, from, to table.Identifier) (*tab
 
 func (h *hive) ListNamespaces(ctx context.Context, parent table.Identifier) ([]table.Identifier, error) {
 	namespaces := []table.Identifier{}
-	return namespaces, h.bucket.Iter(ctx, "", func(name string) error {
-		namespaces = append(namespaces, table.Identifier{filepath.Base(name)})
+	return namespaces, h.bucket.Iter(ctx, filepath.Join(parent...), func(name string) error {
+		namespaces = append(namespaces, table.Identifier{name})
 		return nil
 	})
 }
@@ -112,9 +112,7 @@ func (h *hive) loadLatestTable(ctx context.Context, identifier table.Identifier,
 		return nil, err
 	}
 
-	// Scope the table bucket to the table's namespace and name.
-	tableBucket := objstore.NewPrefixedBucket(h.bucket, filepath.Join(ns, tbl))
-	return table.New(identifier, md, filepath.Join(ns, tbl, hiveTableMetadataDir, hiveMetadataFileName(md.Version())), tableBucket), nil
+	return table.New(identifier, md, filepath.Join(ns, tbl, hiveTableMetadataDir, hiveMetadataFileName(md.Version())), h.bucket), nil
 }
 
 // getTableMetadata returns the metadata of the table at the specified version.
