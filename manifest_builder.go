@@ -1,7 +1,11 @@
 package iceberg
 
 import (
+	"bytes"
+	"fmt"
 	"io"
+	"text/template"
+	"time"
 
 	"github.com/hamba/avro/v2/ocf"
 )
@@ -92,7 +96,7 @@ func (builder DataFileBuilder) WithSortOrderID(sortOrderID int) DataFileBuilder 
 
 func WriteManifestV1(w io.Writer, entries []ManifestEntry) error {
 	enc, err := ocf.NewEncoder(
-		AvroSchemaFromEntries(entries),
+		AvroSchemaFromEntriesV1(entries),
 		w,
 		ocf.WithMetadata(map[string][]byte{
 			"format-version": []byte("1"),
@@ -117,14 +121,41 @@ func WriteManifestV1(w io.Writer, entries []ManifestEntry) error {
 	return nil
 }
 
-// AvroSchemaFromEntries creates an Avro schema from the given manifest entries.
+// AvroSchemaFromEntriesV1 creates an Avro schema from the given manifest entries.
 // The entries must all share the same partition spec.
-func AvroSchemaFromEntries(entries []ManifestEntry) string {
-	// TODO implement support for partition spec in entries
-	return defaultEntryV1Schema
+func AvroSchemaFromEntriesV1(entries []ManifestEntry) string {
+	partitions := entries[0].DataFile().Partition() // Pull the first entries partition spec since they are expected to be the same for all entries.
+	b := &bytes.Buffer{}
+	if err := template.Must(
+		template.New("EntryV1Schema").
+			Funcs(template.FuncMap{
+				"Type": func(i any) string {
+					switch t := i.(type) {
+					case string:
+						return `["null", "string"]`
+					case int:
+						return `["null", "int"]`
+					case int64:
+						return `["null", "long"]`
+					case []byte:
+						return `["null", "bytes"]`
+					case time.Time:
+						return `["null", {"type": "int", "logicalType": "date"}]`
+					default:
+						panic(fmt.Sprintf("unsupported type %T", t))
+					}
+				},
+			}).
+			Parse(EntryV1SchemaTmpl)).Execute(b, partitions); err != nil {
+		panic(err)
+	}
+
+	return b.String()
 }
 
-const defaultEntryV1Schema = `{
+// EntryV1SchemaTmpl is a Go text/template template for the Avro schema of a v1 manifest entry.
+// It expects a map[string]any as the partitions as as the templated object. It calls a custom Type function to determine the Avro type for each partition value.
+var EntryV1SchemaTmpl = `{
         "type": "record",
         "name": "manifest_entry",
         "fields": [
@@ -143,6 +174,27 @@ const defaultEntryV1Schema = `{
                             "doc": "File format name: avro, orc, or parquet",
                             "field-id": 101
                         },
+                        {{- if . }}
+                        {
+                            "name": "partition",
+                            "type": {
+                                "type": "record",
+                                "name": "r102",
+                                "fields": [
+									{{ $first := true }}
+                                    {{- range $key, $value := . }}
+									{{ if $first }}
+										{{ $first = false }}
+									{{ else }}
+										,
+									{{ end }}
+                                    {"name": "{{ $key }}", "type": {{ Type $value }}}
+                                    {{- end }}
+                                ]
+                            },
+                            "field-id": 102
+                        },
+                        {{- end }}
                         {"name": "record_count", "type": "long", "doc": "Number of records in the file", "field-id": 103},
                         {"name": "file_size_in_bytes", "type": "long", "doc": "Total file size in bytes", "field-id": 104},
                         {"name": "block_size_in_bytes", "type": "long", "field-id": 105},
