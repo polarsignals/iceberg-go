@@ -400,18 +400,13 @@ func (m *ManifestTestSuite) writeManifestList() {
 }
 
 func (m *ManifestTestSuite) writeManifestEntries() {
-	enc, err := ocf.NewEncoder(internal.AvroSchemaCache.Get(internal.ManifestEntryV1Key).String(), &m.v1ManifestEntries,
-		ocf.WithMetadata(map[string][]byte{
-			"format-version": []byte("1"),
-		}), ocf.WithCodec(ocf.Deflate))
-	m.Require().NoError(err)
-
+	entries := make([]ManifestEntry, 0, len(manifestEntryV1Records))
 	for _, ent := range manifestEntryV1Records {
-		m.Require().NoError(enc.Encode(ent))
+		entries = append(entries, ent)
 	}
-	m.Require().NoError(enc.Close())
+	m.Require().NoError(WriteManifestV1(&m.v1ManifestEntries, entries))
 
-	enc, err = ocf.NewEncoder(internal.AvroSchemaCache.Get(internal.ManifestEntryV2Key).String(),
+	enc, err := ocf.NewEncoder(internal.AvroSchemaCache.Get(internal.ManifestEntryV2Key).String(),
 		&m.v2ManifestEntries, ocf.WithMetadata(map[string][]byte{
 			"format-version": []byte("2"),
 			"avro.codec":     []byte("deflate"),
