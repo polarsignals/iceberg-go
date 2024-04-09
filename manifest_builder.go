@@ -1,5 +1,11 @@
 package iceberg
 
+import (
+	"io"
+
+	"github.com/hamba/avro/v2/ocf"
+)
+
 func NewManifestEntryV1(entryStatus ManifestEntryStatus, snapshotID int64, data dataFile) ManifestEntry {
 	return &manifestEntryV1{
 		EntryStatus: entryStatus,
@@ -83,3 +89,204 @@ func (builder DataFileBuilder) WithSortOrderID(sortOrderID int) DataFileBuilder 
 	builder.SortOrder = &sortOrderID
 	return builder
 }
+
+func WriteManifestV1(w io.Writer, entries []ManifestEntry) error {
+	enc, err := ocf.NewEncoder(
+		AvroSchemaFromEntries(entries),
+		w,
+		ocf.WithMetadata(map[string][]byte{
+			"format-version": []byte("1"),
+			"schema":         []byte("todo"), // TODO
+			"schema-id":      []byte("todo"), // TODO
+			"partition-spec": []byte("todo"), // TODO
+			"avro.codec":     []byte("deflate"),
+		}),
+		ocf.WithCodec(ocf.Deflate),
+	)
+	if err != nil {
+		return err
+	}
+	defer enc.Close()
+
+	for _, entry := range entries {
+		if err := enc.Encode(entry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// AvroSchemaFromEntries creates an Avro schema from the given manifest entries.
+// The entries must all share the same partition spec.
+func AvroSchemaFromEntries(entries []ManifestEntry) string {
+	// TODO implement support for partition spec in entries
+	return defaultEntryV1Schema
+}
+
+const defaultEntryV1Schema = `{
+        "type": "record",
+        "name": "manifest_entry",
+        "fields": [
+            {"name": "status", "type": "int", "field-id": 0},
+            {"name": "snapshot_id", "type": "long", "field-id": 1},
+            {
+                "name": "data_file",
+                "type": {
+                    "type": "record",
+                    "name": "r2",
+                    "fields": [
+                        {"name": "file_path", "type": "string", "doc": "Location URI with FS scheme", "field-id": 100},
+                        {
+                            "name": "file_format",
+                            "type": "string",
+                            "doc": "File format name: avro, orc, or parquet",
+                            "field-id": 101
+                        },
+                        {"name": "record_count", "type": "long", "doc": "Number of records in the file", "field-id": 103},
+                        {"name": "file_size_in_bytes", "type": "long", "doc": "Total file size in bytes", "field-id": 104},
+                        {"name": "block_size_in_bytes", "type": "long", "field-id": 105},
+                        {
+                            "name": "column_sizes",
+                            "type": [
+                                "null",
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "k117_v118",
+                                        "fields": [
+                                            {"name": "key", "type": "int", "field-id": 117},
+                                            {"name": "value", "type": "long", "field-id": 118}
+                                        ]
+                                    },
+                                    "logicalType": "map"
+                                }
+                            ],
+                            "doc": "Map of column id to total size on disk",                            
+                            "field-id": 108
+                        },
+                        {
+                            "name": "value_counts",
+                            "type": [
+                                "null",
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "k119_v120",
+                                        "fields": [
+                                            {"name": "key", "type": "int", "field-id": 119},
+                                            {"name": "value", "type": "long", "field-id": 120}
+                                        ]
+                                    },
+                                    "logicalType": "map"
+                                }
+                            ],
+                            "doc": "Map of column id to total count, including null and NaN",                            
+                            "field-id": 109
+                        },
+                        {
+                            "name": "null_value_counts",
+                            "type": [
+                                "null",
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "k121_v122",
+                                        "fields": [
+                                            {"name": "key", "type": "int", "field-id": 121},
+                                            {"name": "value", "type": "long", "field-id": 122}
+                                        ]
+                                    },
+                                    "logicalType": "map"
+                                }
+                            ],
+                            "doc": "Map of column id to null value count",                            
+                            "field-id": 110
+                        },
+                        {
+                            "name": "nan_value_counts",
+                            "type": [
+                                "null",
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "k138_v139",
+                                        "fields": [
+                                            {"name": "key", "type": "int", "field-id": 138},
+                                            {"name": "value", "type": "long", "field-id": 139}
+                                        ]
+                                    },
+                                    "logicalType": "map"
+                                }
+                            ],
+                            "doc": "Map of column id to number of NaN values in the column",                            
+                            "field-id": 137
+                        },
+                        {
+                            "name": "lower_bounds",
+                            "type": [
+                                "null",
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "k126_v127",
+                                        "fields": [
+                                            {"name": "key", "type": "int", "field-id": 126},
+                                            {"name": "value", "type": "bytes", "field-id": 127}
+                                        ]
+                                    },
+                                    "logicalType": "map"
+                                }
+                            ],
+                            "doc": "Map of column id to lower bound",                            
+                            "field-id": 125
+                        },
+                        {
+                            "name": "upper_bounds",
+                            "type": [
+                                "null",
+                                {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "record",
+                                        "name": "k129_v130",
+                                        "fields": [
+                                            {"name": "key", "type": "int", "field-id": 129},
+                                            {"name": "value", "type": "bytes", "field-id": 130}
+                                        ]
+                                    },
+                                    "logicalType": "map"
+                                }
+                            ],
+                            "doc": "Map of column id to upper bound",                            
+                            "field-id": 128
+                        },
+                        {
+                            "name": "key_metadata",
+                            "type": ["null", "bytes"],
+                            "doc": "Encryption key metadata blob",                            
+                            "field-id": 131
+                        },
+                        {
+                            "name": "split_offsets",
+                            "type": ["null", {"type": "array", "items": "long", "element-id": 133}],
+                            "doc": "Splittable offsets",                            
+                            "field-id": 132
+                        },
+                        {
+                            "name": "sort_order_id",
+                            "type": ["null", "int"],
+                            "doc": "Sort order ID",                            
+                            "field-id": 140
+                        }
+                    ]
+                },
+                "field-id": 2
+            }
+        ]
+    }`
