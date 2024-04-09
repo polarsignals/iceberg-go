@@ -27,6 +27,7 @@ require (
 	github.com/go-kit/log v0.2.1
 	github.com/google/uuid v1.6.0
 	github.com/hamba/avro/v2 v2.16.0
+	github.com/parquet-go/parquet-go v0.20.1
 	github.com/pterm/pterm v0.12.78
 	github.com/stretchr/testify v1.8.4
 	github.com/thanos-io/objstore v0.0.0-20240309075357-e8336a5fd5f3
@@ -48,6 +49,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.2+incompatible // indirect
+	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.16.14 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.14.11 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.2.10 // indirect
@@ -94,7 +96,9 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/ncw/swift v1.0.53 // indirect
+	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/oracle/oci-go-sdk/v65 v65.41.1 // indirect
+	github.com/pierrec/lz4/v4 v4.1.18 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
@@ -104,6 +108,7 @@ require (
 	github.com/prometheus/procfs v0.11.1 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/rs/xid v1.5.0 // indirect
+	github.com/segmentio/encoding v0.3.6 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sony/gobreaker v0.5.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect

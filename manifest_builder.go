@@ -49,7 +49,7 @@ func (builder DataFileBuilder) WithColumnSizes(columnSizes map[int]int64) DataFi
 	return builder
 }
 
-func (builder DataFileBuilder) WithVauecounts(valueCounts map[int]int64) DataFileBuilder {
+func (builder DataFileBuilder) WithValueCounts(valueCounts map[int]int64) DataFileBuilder {
 	builder.ValCounts = avroColMapFromMap[int, int64](valueCounts)
 	return builder
 }
