@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/iceberg-go/internal"
 	"github.com/hamba/avro/v2/ocf"
 	"github.com/stretchr/testify/suite"
 	"github.com/thanos-io/objstore"
@@ -378,7 +377,7 @@ type ManifestTestSuite struct {
 }
 
 func (m *ManifestTestSuite) writeManifestList() {
-	enc, err := ocf.NewEncoder(internal.AvroSchemaCache.Get(internal.ManifestListV1Key).String(),
+	enc, err := ocf.NewEncoder(AvroManifestListV1Schema,
 		&m.v1ManifestList, ocf.WithMetadata(map[string][]byte{
 			"avro.codec": []byte("deflate"),
 		}),
@@ -388,7 +387,7 @@ func (m *ManifestTestSuite) writeManifestList() {
 	m.Require().NoError(enc.Encode(manifestFileRecordsV1[0]))
 	enc.Close()
 
-	enc, err = ocf.NewEncoder(internal.AvroSchemaCache.Get(internal.ManifestListV2Key).String(),
+	enc, err = ocf.NewEncoder(AvroManifestListV2Schema,
 		&m.v2ManifestList, ocf.WithMetadata(map[string][]byte{
 			"format-version": []byte("2"),
 			"avro.codec":     []byte("deflate"),
@@ -406,7 +405,7 @@ func (m *ManifestTestSuite) writeManifestEntries() {
 	}
 	m.Require().NoError(WriteManifestV1(&m.v1ManifestEntries, entries))
 
-	enc, err := ocf.NewEncoder(internal.AvroSchemaCache.Get(internal.ManifestEntryV2Key).String(),
+	enc, err := ocf.NewEncoder(AvroManifestEntryV2Schema,
 		&m.v2ManifestEntries, ocf.WithMetadata(map[string][]byte{
 			"format-version": []byte("2"),
 			"avro.codec":     []byte("deflate"),
