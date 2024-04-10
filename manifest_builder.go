@@ -94,6 +94,29 @@ func (builder DataFileBuilder) WithSortOrderID(sortOrderID int) DataFileBuilder 
 	return builder
 }
 
+func WriteManifestListV1(w io.Writer, files []ManifestFile) error {
+	enc, err := ocf.NewEncoder(
+		AvroManifestListV1Schema,
+		w,
+		ocf.WithMetadata(map[string][]byte{
+			"avro.codec": []byte("deflate"),
+		}),
+		ocf.WithCodec(ocf.Deflate),
+	)
+	if err != nil {
+		return err
+	}
+	defer enc.Close()
+
+	for _, file := range files {
+		if err := enc.Encode(file); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func WriteManifestV1(w io.Writer, entries []ManifestEntry) error {
 	enc, err := ocf.NewEncoder(
 		AvroSchemaFromEntriesV1(entries),
@@ -101,7 +124,6 @@ func WriteManifestV1(w io.Writer, entries []ManifestEntry) error {
 		ocf.WithMetadata(map[string][]byte{
 			"format-version": []byte("1"),
 			"schema":         []byte("todo"), // TODO
-			"schema-id":      []byte("todo"), // TODO
 			"partition-spec": []byte("todo"), // TODO
 			"avro.codec":     []byte("deflate"),
 		}),
