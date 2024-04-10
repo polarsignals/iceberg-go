@@ -7,6 +7,15 @@ import (
 	"github.com/parquet-go/parquet-go"
 )
 
+func ManifestEntryV1FromParquet(path string, size int64, r io.ReaderAt) (ManifestEntry, error) {
+	df, err := DataFileFromParquet(path, size, r)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewManifestEntryV1(EntryStatusADDED, size, df), nil
+}
+
 func DataFileFromParquet(path string, size int64, r io.ReaderAt) (DataFile, error) {
 	f, err := parquet.OpenFile(r, size)
 	if err != nil {

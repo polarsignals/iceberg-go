@@ -10,7 +10,7 @@ import (
 	"github.com/hamba/avro/v2/ocf"
 )
 
-func NewManifestEntryV1(entryStatus ManifestEntryStatus, snapshotID int64, data dataFile) ManifestEntry {
+func NewManifestEntryV1(entryStatus ManifestEntryStatus, snapshotID int64, data DataFile) ManifestEntry {
 	return &manifestEntryV1{
 		EntryStatus: entryStatus,
 		Snapshot:    snapshotID,

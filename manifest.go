@@ -399,12 +399,20 @@ func fetchManifestEntries(m ManifestFile, bucket objstore.Bucket, discardDeleted
 		var tmp ManifestEntry
 		if isVer1 {
 			if isFallback {
-				tmp = &fallbackManifestEntryV1{}
+				tmp = &fallbackManifestEntryV1{
+					manifestEntryV1: manifestEntryV1{
+						Data: &dataFile{},
+					},
+				}
 			} else {
-				tmp = &manifestEntryV1{}
+				tmp = &manifestEntryV1{
+					Data: &dataFile{},
+				}
 			}
 		} else {
-			tmp = &manifestEntryV2{}
+			tmp = &manifestEntryV2{
+				Data: &dataFile{},
+			}
 		}
 
 		if err := dec.Decode(tmp); err != nil {
@@ -709,7 +717,7 @@ type manifestEntryV1 struct {
 	Snapshot    int64               `avro:"snapshot_id"`
 	SeqNum      *int64
 	FileSeqNum  *int64
-	Data        dataFile `avro:"data_file"`
+	Data        DataFile `avro:"data_file"`
 }
 
 type fallbackManifestEntryV1 struct {
@@ -738,14 +746,14 @@ func (m *manifestEntryV1) FileSequenceNum() *int64 {
 	return m.FileSeqNum
 }
 
-func (m *manifestEntryV1) DataFile() DataFile { return &m.Data }
+func (m *manifestEntryV1) DataFile() DataFile { return m.Data }
 
 type manifestEntryV2 struct {
 	EntryStatus ManifestEntryStatus `avro:"status"`
 	Snapshot    *int64              `avro:"snapshot_id"`
 	SeqNum      *int64              `avro:"sequence_number"`
 	FileSeqNum  *int64              `avro:"file_sequence_number"`
-	Data        dataFile            `avro:"data_file"`
+	Data        DataFile            `avro:"data_file"`
 }
 
 func (m *manifestEntryV2) inheritSeqNum(manifest ManifestFile) {
@@ -783,7 +791,7 @@ func (m *manifestEntryV2) FileSequenceNum() *int64 {
 	return m.FileSeqNum
 }
 
-func (m *manifestEntryV2) DataFile() DataFile { return &m.Data }
+func (m *manifestEntryV2) DataFile() DataFile { return m.Data }
 
 // DataFile is the interface for reading the information about a
 // given data file indicated by an entry in a manifest list.
