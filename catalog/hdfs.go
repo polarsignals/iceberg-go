@@ -62,7 +62,7 @@ func (h *hdfs) DropTable(ctx context.Context, identifier table.Identifier) error
 	return h.bucket.Delete(ctx, filepath.Join(ns, tbl))
 }
 
-func (h *hdfs) RenameTable(ctx context.Context, from, to table.Identifier) (*table.Table, error) {
+func (h *hdfs) RenameTable(ctx context.Context, from, to table.Identifier) (table.Table, error) {
 	return nil, fmt.Errorf("hdfs catalog does not support renaming tables")
 }
 
@@ -90,7 +90,7 @@ func (h *hdfs) UpdateNamespaceProperties(ctx context.Context, namespace table.Id
 	return PropertiesUpdateSummary{}, fmt.Errorf("hdfs catalog does not support updating namespace properties")
 }
 
-func (h *hdfs) LoadTable(ctx context.Context, identifier table.Identifier, _ iceberg.Properties) (*table.Table, error) {
+func (h *hdfs) LoadTable(ctx context.Context, identifier table.Identifier, _ iceberg.Properties) (table.Table, error) {
 	ns, tbl, err := splitIdentForPath(identifier)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (h *hdfs) LoadTable(ctx context.Context, identifier table.Identifier, _ ice
 	return t, nil
 }
 
-func (h *hdfs) loadLatestTable(ctx context.Context, identifier table.Identifier, ns, tbl string) (*table.Table, error) {
+func (h *hdfs) loadLatestTable(ctx context.Context, identifier table.Identifier, ns, tbl string) (table.Table, error) {
 	v, err := getTableVersion(ctx, h.bucket, ns, tbl)
 	if err != nil {
 		return nil, err

@@ -28,33 +28,50 @@ import (
 
 type Identifier = []string
 
-type Table struct {
+type Table interface {
+	Identifier() Identifier
+	Metadata() Metadata
+	MetadataLocation() string
+	Bucket() objstore.Bucket
+	Schema() *iceberg.Schema
+	Spec() iceberg.PartitionSpec
+	SortOrder() SortOrder
+	Properties() iceberg.Properties
+	Location() string
+	CurrentSnapshot() *Snapshot
+	SnapshotByID(id int64) *Snapshot
+	SnapshotByName(name string) *Snapshot
+	Schemas() map[int]*iceberg.Schema
+	Equals(other Table) bool
+}
+
+type baseTable struct {
 	identifier       Identifier
 	metadata         Metadata
 	metadataLocation string
 	bucket           objstore.Bucket
 }
 
-func (t Table) Equals(other Table) bool {
-	return slices.Equal(t.identifier, other.identifier) &&
-		t.metadataLocation == other.metadataLocation &&
-		reflect.DeepEqual(t.metadata, other.metadata)
+func (t *baseTable) Equals(other Table) bool {
+	return slices.Equal(t.identifier, other.Identifier()) &&
+		t.metadataLocation == other.MetadataLocation() &&
+		reflect.DeepEqual(t.metadata, other.Metadata())
 }
 
-func (t Table) Identifier() Identifier   { return t.identifier }
-func (t Table) Metadata() Metadata       { return t.metadata }
-func (t Table) MetadataLocation() string { return t.metadataLocation }
-func (t Table) Bucket() objstore.Bucket  { return t.bucket }
+func (t *baseTable) Identifier() Identifier   { return t.identifier }
+func (t *baseTable) Metadata() Metadata       { return t.metadata }
+func (t *baseTable) MetadataLocation() string { return t.metadataLocation }
+func (t *baseTable) Bucket() objstore.Bucket  { return t.bucket }
 
-func (t Table) Schema() *iceberg.Schema              { return t.metadata.CurrentSchema() }
-func (t Table) Spec() iceberg.PartitionSpec          { return t.metadata.PartitionSpec() }
-func (t Table) SortOrder() SortOrder                 { return t.metadata.SortOrder() }
-func (t Table) Properties() iceberg.Properties       { return t.metadata.Properties() }
-func (t Table) Location() string                     { return t.metadata.Location() }
-func (t Table) CurrentSnapshot() *Snapshot           { return t.metadata.CurrentSnapshot() }
-func (t Table) SnapshotByID(id int64) *Snapshot      { return t.metadata.SnapshotByID(id) }
-func (t Table) SnapshotByName(name string) *Snapshot { return t.metadata.SnapshotByName(name) }
-func (t Table) Schemas() map[int]*iceberg.Schema {
+func (t *baseTable) Schema() *iceberg.Schema              { return t.metadata.CurrentSchema() }
+func (t *baseTable) Spec() iceberg.PartitionSpec          { return t.metadata.PartitionSpec() }
+func (t *baseTable) SortOrder() SortOrder                 { return t.metadata.SortOrder() }
+func (t *baseTable) Properties() iceberg.Properties       { return t.metadata.Properties() }
+func (t *baseTable) Location() string                     { return t.metadata.Location() }
+func (t *baseTable) CurrentSnapshot() *Snapshot           { return t.metadata.CurrentSnapshot() }
+func (t *baseTable) SnapshotByID(id int64) *Snapshot      { return t.metadata.SnapshotByID(id) }
+func (t *baseTable) SnapshotByName(name string) *Snapshot { return t.metadata.SnapshotByName(name) }
+func (t *baseTable) Schemas() map[int]*iceberg.Schema {
 	m := make(map[int]*iceberg.Schema)
 	for _, s := range t.metadata.Schemas() {
 		m[s.ID] = s
@@ -62,8 +79,8 @@ func (t Table) Schemas() map[int]*iceberg.Schema {
 	return m
 }
 
-func New(ident Identifier, meta Metadata, location string, bucket objstore.Bucket) *Table {
-	return &Table{
+func New(ident Identifier, meta Metadata, location string, bucket objstore.Bucket) Table {
+	return &baseTable{
 		identifier:       ident,
 		metadata:         meta,
 		metadataLocation: location,
@@ -71,7 +88,7 @@ func New(ident Identifier, meta Metadata, location string, bucket objstore.Bucke
 	}
 }
 
-func NewFromLocation(ident Identifier, metalocation string, bucket objstore.Bucket) (*Table, error) {
+func NewFromLocation(ident Identifier, metalocation string, bucket objstore.Bucket) (Table, error) {
 	var meta Metadata
 
 	r, err := bucket.Get(context.Background(), metalocation)

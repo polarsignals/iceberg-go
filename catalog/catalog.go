@@ -147,12 +147,12 @@ type Catalog interface {
 	// identifiers containing the information required to load the table via that catalog.
 	ListTables(ctx context.Context, namespace table.Identifier) ([]table.Identifier, error)
 	// LoadTable loads a table from the catalog and returns a Table with the metadata.
-	LoadTable(ctx context.Context, identifier table.Identifier, props iceberg.Properties) (*table.Table, error)
+	LoadTable(ctx context.Context, identifier table.Identifier, props iceberg.Properties) (table.Table, error)
 	// DropTable tells the catalog to drop the table entirely
 	DropTable(ctx context.Context, identifier table.Identifier) error
 	// RenameTable tells the catalog to rename a given table by the identifiers
 	// provided, and then loads and returns the destination table
-	RenameTable(ctx context.Context, from, to table.Identifier) (*table.Table, error)
+	RenameTable(ctx context.Context, from, to table.Identifier) (table.Table, error)
 	// ListNamespaces returns the list of available namespaces, optionally filtering by a
 	// parent namespace
 	ListNamespaces(ctx context.Context, parent table.Identifier) ([]table.Identifier, error)

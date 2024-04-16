@@ -32,12 +32,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarsignals/iceberg-go"
-	"github.com/polarsignals/iceberg-go/table"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/go-kit/log"
+	"github.com/polarsignals/iceberg-go"
+	"github.com/polarsignals/iceberg-go/table"
 	"github.com/thanos-io/objstore/client"
 )
 
@@ -591,7 +591,7 @@ func (t *tblResponse) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-func (r *RestCatalog) LoadTable(ctx context.Context, identifier table.Identifier, props iceberg.Properties) (*table.Table, error) {
+func (r *RestCatalog) LoadTable(ctx context.Context, identifier table.Identifier, props iceberg.Properties) (table.Table, error) {
 	ns, tbl, err := splitIdentForPath(identifier)
 	if err != nil {
 		return nil, err
@@ -630,7 +630,7 @@ func (r *RestCatalog) DropTable(ctx context.Context, identifier table.Identifier
 	return fmt.Errorf("%w: [Rest Catalog] drop table", iceberg.ErrNotImplemented)
 }
 
-func (r *RestCatalog) RenameTable(ctx context.Context, from, to table.Identifier) (*table.Table, error) {
+func (r *RestCatalog) RenameTable(ctx context.Context, from, to table.Identifier) (table.Table, error) {
 	return nil, fmt.Errorf("%w: [Rest Catalog] rename table", iceberg.ErrNotImplemented)
 }
 

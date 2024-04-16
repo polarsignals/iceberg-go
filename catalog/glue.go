@@ -22,12 +22,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/polarsignals/iceberg-go"
-	"github.com/polarsignals/iceberg-go/table"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/glue/types"
 	"github.com/go-kit/log"
+	"github.com/polarsignals/iceberg-go"
+	"github.com/polarsignals/iceberg-go/table"
 	"github.com/thanos-io/objstore/client"
 )
 
@@ -93,7 +93,7 @@ func (c *GlueCatalog) ListTables(ctx context.Context, namespace table.Identifier
 // LoadTable loads a table from the catalog table details.
 //
 // The identifier should contain the Glue database name, then glue table name.
-func (c *GlueCatalog) LoadTable(ctx context.Context, identifier table.Identifier, props iceberg.Properties) (*table.Table, error) {
+func (c *GlueCatalog) LoadTable(ctx context.Context, identifier table.Identifier, props iceberg.Properties) (table.Table, error) {
 	database, tableName, err := identifierToGlueTable(identifier)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (c *GlueCatalog) DropTable(ctx context.Context, identifier table.Identifier
 	return fmt.Errorf("%w: [Glue Catalog] drop table", iceberg.ErrNotImplemented)
 }
 
-func (c *GlueCatalog) RenameTable(ctx context.Context, from, to table.Identifier) (*table.Table, error) {
+func (c *GlueCatalog) RenameTable(ctx context.Context, from, to table.Identifier) (table.Table, error) {
 	return nil, fmt.Errorf("%w: [Glue Catalog] rename table", iceberg.ErrNotImplemented)
 }
 
