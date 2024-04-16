@@ -30,8 +30,6 @@ func DataFileFromParquet(path string, size int64, r io.ReaderAt) (DataFile, erro
 		size,
 	)
 
-	f.ColumnIndexes()
-
 	// Create the upper and lower bounds for each column.
 	numColumns := len(f.Metadata().RowGroups[0].Columns)
 	upper, lower := make(map[int][]byte, numColumns), make(map[int][]byte, numColumns)
