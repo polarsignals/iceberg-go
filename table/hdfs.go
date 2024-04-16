@@ -26,6 +26,18 @@ type hdfsTable struct {
 	*baseTable
 }
 
+func NewHDFSTable(ver int, ident Identifier, meta Metadata, location string, bucket objstore.Bucket) Table {
+	return &hdfsTable{
+		version: ver,
+		baseTable: &baseTable{
+			identifier:       ident,
+			metadata:         meta,
+			metadataLocation: location,
+			bucket:           bucket,
+		},
+	}
+}
+
 func (t *hdfsTable) SnapshotWriter() (SnapshotWriter, error) {
 	return &hdfsSnapshotWriter{
 		snapshotID: rand.Int63(),

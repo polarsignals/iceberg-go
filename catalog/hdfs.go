@@ -116,7 +116,7 @@ func (h *hdfs) loadLatestTable(ctx context.Context, identifier table.Identifier,
 		return nil, err
 	}
 
-	return table.New(identifier, md, filepath.Join(ns, tbl, hdfsTableMetadataDir, hdfsMetadataFileName(md.Version())), h.bucket), nil
+	return table.NewHDFSTable(v, identifier, md, filepath.Join(ns, tbl, hdfsTableMetadataDir, hdfsMetadataFileName(md.Version())), h.bucket), nil
 }
 
 // getTableMetadata returns the metadata of the table at the specified version.
