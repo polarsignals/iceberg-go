@@ -19,6 +19,8 @@ package table
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"reflect"
 
 	"github.com/polarsignals/iceberg-go"
@@ -43,6 +45,16 @@ type Table interface {
 	SnapshotByName(name string) *Snapshot
 	Schemas() map[int]*iceberg.Schema
 	Equals(other Table) bool
+
+	SnapshotWriter() (SnapshotWriter, error)
+}
+
+type ReadOnlyTable struct {
+	*baseTable
+}
+
+func (r *ReadOnlyTable) SnapshotWriter() (SnapshotWriter, error) {
+	return nil, fmt.Errorf("table is read-only")
 }
 
 type baseTable struct {
@@ -80,11 +92,13 @@ func (t *baseTable) Schemas() map[int]*iceberg.Schema {
 }
 
 func New(ident Identifier, meta Metadata, location string, bucket objstore.Bucket) Table {
-	return &baseTable{
-		identifier:       ident,
-		metadata:         meta,
-		metadataLocation: location,
-		bucket:           bucket,
+	return &ReadOnlyTable{
+		baseTable: &baseTable{
+			identifier:       ident,
+			metadata:         meta,
+			metadataLocation: location,
+			bucket:           bucket,
+		},
 	}
 }
 
@@ -102,4 +116,13 @@ func NewFromLocation(ident Identifier, metalocation string, bucket objstore.Buck
 	}
 
 	return New(ident, meta, metalocation, bucket), nil
+}
+
+// SnapshotWriter is an interface for writing a new snapshot to a table.
+type SnapshotWriter interface {
+	// Append accepts a ReaderAt object that should read the Parquet file that is to be added to the snapshot.
+	Append(r io.ReaderAt, size int64) error
+
+	// Close writes the new snapshot to the table and closes the writer. It is an error to call Append after Close.
+	Close() error
 }
