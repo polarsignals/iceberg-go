@@ -57,14 +57,14 @@ type Table interface {
 	Schemas() map[int]*iceberg.Schema
 	Equals(other Table) bool
 
-	SnapshotWriter() (SnapshotWriter, error)
+	SnapshotWriter(options ...WriterOption) (SnapshotWriter, error)
 }
 
 type ReadOnlyTable struct {
 	*baseTable
 }
 
-func (r *ReadOnlyTable) SnapshotWriter() (SnapshotWriter, error) {
+func (r *ReadOnlyTable) SnapshotWriter(options ...WriterOption) (SnapshotWriter, error) {
 	return nil, fmt.Errorf("table is read-only")
 }
 
@@ -136,6 +136,32 @@ type SnapshotWriter interface {
 
 	// Close writes the new snapshot to the table and closes the writer. It is an error to call Append after Close.
 	Close(ctx context.Context) error
+}
+
+type WriterOption func(*writerOptions)
+
+type writerOptions struct {
+	fastAppendMode    bool
+	manifestSizeBytes int
+	mergeSchema       bool
+}
+
+func WithMergeSchema() WriterOption {
+	return func(o *writerOptions) {
+		o.mergeSchema = true
+	}
+}
+
+func WithFastAppend() WriterOption {
+	return func(o *writerOptions) {
+		o.fastAppendMode = true
+	}
+}
+
+func WithManifestSizeBytes(size int) WriterOption {
+	return func(o *writerOptions) {
+		o.manifestSizeBytes = size
+	}
 }
 
 func generateULID() ulid.ULID {

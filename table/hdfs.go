@@ -37,13 +37,20 @@ func NewHDFSTable(ver int, ident Identifier, meta Metadata, location string, buc
 	}
 }
 
-func (t *hdfsTable) SnapshotWriter() (SnapshotWriter, error) {
-	return &hdfsSnapshotWriter{
+func (t *hdfsTable) SnapshotWriter(options ...WriterOption) (SnapshotWriter, error) {
+	writer := &hdfsSnapshotWriter{
+		options:    writerOptions{},
 		snapshotID: rand.Int63(),
 		bucket:     t.bucket,
 		version:    t.version,
 		table:      t,
-	}, nil
+	}
+
+	for _, options := range options {
+		options(&writer.options)
+	}
+
+	return writer, nil
 }
 
 type hdfsSnapshotWriter struct {
@@ -51,6 +58,7 @@ type hdfsSnapshotWriter struct {
 	snapshotID int64
 	bucket     objstore.Bucket
 	table      Table
+	options    writerOptions
 
 	schema  *iceberg.Schema
 	entries []iceberg.ManifestEntry
@@ -102,21 +110,49 @@ func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 
 	// Upload the manifest file
-	// TODO: This is fastAppend only. We also want to support a normal append; where the entry is appended to the previous manifest
 	manifestFile := fmt.Sprintf("%s%s", generateULID(), manifestFileExt)
 	path := filepath.Join(s.metadataDir(), manifestFile)
+	manifest := s.entries
+	currentSnapshot := s.table.CurrentSnapshot()
+	var previousManifests []iceberg.ManifestFile
+	if currentSnapshot != nil {
+		var err error
+		previousManifests, err = currentSnapshot.Manifests(s.bucket)
+		if err != nil {
+			return err
+		}
+	}
+	if !s.options.fastAppendMode && s.options.manifestSizeBytes > 0 { // If not in fast append mode; check if we can append to the previous manifest file.
+		// Check the size of the previous manifest file
+		latest := previousManifests[len(previousManifests)-1]
+		if latest.Length() < int64(s.options.manifestSizeBytes) { // Append to the latest manifest
+			previous, err := latest.FetchEntries(s.bucket, false)
+			if err != nil {
+				return err
+			}
+			manifest = append(previous, s.entries...)
+		}
+	}
+
+	// Write the manifest file
 	if err := s.uploadManifest(ctx, path, func(ctx context.Context, w io.Writer) error {
-		return iceberg.WriteManifestV1(w, s.entries)
+		return iceberg.WriteManifestV1(w, manifest)
 	}); err != nil {
 		return err
 	}
 
-	// Create manifest list
-	// TODO: get the file size from the manifest file just written
-	manifestList, err := s.createNewManifestList(path, 0, s.snapshotID, s.table)
+	// Fetch the size of the manifest file
+	attr, err := s.bucket.Attributes(ctx, path)
 	if err != nil {
 		return err
 	}
+
+	// Create manifest list
+	newmanifest := iceberg.NewManifestV1Builder(path, attr.Size, 0, s.snapshotID).
+		AddedFiles(int32(len(s.entries))).
+		ExistingFiles(int32(len(manifest) - len(s.entries))).
+		Build()
+	manifestList := append(previousManifests, newmanifest)
 
 	// Upload the manifest list
 	manifestListFile := fmt.Sprintf("snap-%v-%s%s", s.snapshotID, generateULID(), manifestFileExt)
@@ -207,27 +243,4 @@ func (s *hdfsSnapshotWriter) uploadManifest(ctx context.Context, path string, wr
 	})
 
 	return errg.Wait()
-}
-
-func (s *hdfsSnapshotWriter) createNewManifestList(manifestPath string, size, snapshotID int64, t Table) ([]iceberg.ManifestFile, error) {
-	var previous []iceberg.ManifestFile
-	snapshot := t.Metadata().CurrentSnapshot()
-	if snapshot != nil {
-		var err error
-		previous, err = t.Metadata().CurrentSnapshot().Manifests(s.bucket)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get previous manifests: %w", err)
-		}
-	}
-
-	newmanifest := iceberg.NewManifestV1Builder(
-		manifestPath,
-		size,
-		0,
-		snapshotID,
-	).
-		AddedFiles(1). // TODO add other available fields
-		Build()
-
-	return append(previous, newmanifest), nil
 }
