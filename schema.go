@@ -280,7 +280,12 @@ func (s *Schema) Equals(other *Schema) bool {
 }
 
 // Merge combines two schemas into a single schema. It returns a schema with an ID that is one greater thatn the ID of the first schema.
+// If the two schemas have the same fields, the first schema is returned.
 func (s *Schema) Merge(other *Schema) (*Schema, error) {
+	if s.Equals(other) {
+		return s, nil
+	}
+
 	if other == nil {
 		return s, nil
 	}

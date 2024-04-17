@@ -169,6 +169,8 @@ func (s *hdfsSnapshotWriter) addSnapshot(ctx context.Context, t Table, snapshot 
 	if !t.Metadata().CurrentSchema().Equals(schema) {
 		// need to only update the schema ID if it has changed
 		schema.ID = metadata.CurrentSchema().ID + 1
+	} else {
+		schema.ID = metadata.CurrentSchema().ID
 	}
 
 	return NewMetadataV1Builder(
