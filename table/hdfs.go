@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/parquet-go/parquet-go"
 	"github.com/polarsignals/iceberg-go"
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
@@ -53,6 +52,7 @@ type hdfsSnapshotWriter struct {
 	bucket     objstore.Bucket
 	table      Table
 
+	schema  *iceberg.Schema
 	entries []iceberg.ManifestEntry
 }
 
@@ -64,6 +64,8 @@ func (s *hdfsSnapshotWriter) dataDir() string {
 	return filepath.Join(s.table.Location(), dataDirName)
 }
 
+// TODO: Append operates in 'merge-schema' mode. Where it will automatically merge the schema of the new data with the existing schema.
+// it might be worth setting this as an option.
 func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	b := &bytes.Buffer{}
 	rdr := io.TeeReader(r, b) // Read file into memory while uploading
@@ -75,9 +77,22 @@ func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	}
 
 	// Create manifest entry
-	entry, err := iceberg.ManifestEntryV1FromParquet(dataFile, int64(b.Len()), bytes.NewReader(b.Bytes()))
+	entry, schema, err := iceberg.ManifestEntryV1FromParquet(dataFile, int64(b.Len()), bytes.NewReader(b.Bytes()))
 	if err != nil {
 		return err
+	}
+
+	// Merge the schema with the table schema
+	if s.schema == nil {
+		s.schema, err = s.table.Metadata().CurrentSchema().Merge(schema)
+		if err != nil {
+			return err
+		}
+	} else {
+		s.schema, err = s.schema.Merge(schema)
+		if err != nil {
+			return err
+		}
 	}
 
 	s.entries = append(s.entries, entry)
@@ -105,7 +120,8 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 
 	// Upload the manifest list
 	manifestListFile := fmt.Sprintf("snap-%v-%s%s", s.snapshotID, generateULID(), manifestFileExt)
-	if err := s.uploadManifest(ctx, filepath.Join(s.metadataDir(), manifestListFile), func(ctx context.Context, w io.Writer) error {
+	manifestListPath := filepath.Join(s.metadataDir(), manifestListFile)
+	if err := s.uploadManifest(ctx, manifestListPath, func(ctx context.Context, w io.Writer) error {
 		return iceberg.WriteManifestListV1(w, manifestList)
 	}); err != nil {
 		return err
@@ -116,12 +132,12 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 		SnapshotID:     s.snapshotID,
 		SequenceNumber: 0, // TODO(thor): Get the sequence number from the previous snapshot
 		TimestampMs:    time.Now().UnixMilli(),
-		ManifestList:   path,
+		ManifestList:   manifestListPath,
 		Summary: &Summary{
 			Operation: OpAppend,
 		},
 	}
-	md, err := s.addSnapshot(ctx, s.table, snapshot, nil) // TODO get schema from entries
+	md, err := s.addSnapshot(ctx, s.table, snapshot, s.schema)
 	if err != nil {
 		return err
 	}
@@ -147,11 +163,14 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 	return nil
 }
 
-func (s *hdfsSnapshotWriter) addSnapshot(ctx context.Context, t Table, snapshot Snapshot, sc *parquet.Schema) (Metadata, error) {
+func (s *hdfsSnapshotWriter) addSnapshot(ctx context.Context, t Table, snapshot Snapshot, schema *iceberg.Schema) (Metadata, error) {
 	metadata := t.Metadata()
 
-	// TODO need to only update the schema if it has changed
-	schema := parquetSchemaToIcebergSchema(metadata.CurrentSchema().ID+1, sc)
+	if !t.Metadata().CurrentSchema().Equals(schema) {
+		// need to only update the schema ID if it has changed
+		schema.ID = metadata.CurrentSchema().ID + 1
+	}
+
 	return NewMetadataV1Builder(
 		metadata.Location(),
 		schema,
