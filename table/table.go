@@ -141,9 +141,16 @@ type SnapshotWriter interface {
 type WriterOption func(*writerOptions)
 
 type writerOptions struct {
-	fastAppendMode    bool
-	manifestSizeBytes int
-	mergeSchema       bool
+	fastAppendMode           bool
+	manifestSizeBytes        int
+	mergeSchema              bool
+	expireSnapshotsOlderThan time.Duration
+}
+
+func WithExpireSnapshotsOlderThan(d time.Duration) WriterOption {
+	return func(o *writerOptions) {
+		o.expireSnapshotsOlderThan = d
+	}
 }
 
 func WithMergeSchema() WriterOption {

@@ -223,6 +223,17 @@ func (s *hdfsSnapshotWriter) addSnapshot(ctx context.Context, t Table, snapshot 
 		schema.ID = metadata.CurrentSchema().ID
 	}
 
+	// Expire old snapshots if requested
+	snapshots := metadata.Snapshots()
+	if s.options.expireSnapshotsOlderThan != 0 {
+		snapshots = []Snapshot{}
+		for _, snapshot := range metadata.Snapshots() {
+			if time.Since(time.UnixMilli(snapshot.TimestampMs)) <= s.options.expireSnapshotsOlderThan {
+				snapshots = append(snapshots, snapshot)
+			}
+		}
+	}
+
 	return NewMetadataV1Builder(
 		metadata.Location(),
 		schema,
@@ -232,7 +243,7 @@ func (s *hdfsSnapshotWriter) addSnapshot(ctx context.Context, t Table, snapshot 
 		WithTableUUID(metadata.TableUUID()).
 		WithCurrentSchemaID(schema.ID).
 		WithCurrentSnapshotID(snapshot.SnapshotID).
-		WithSnapshots(append(metadata.Snapshots(), snapshot)).
+		WithSnapshots(append(snapshots, snapshot)).
 		Build(), nil
 }
 
