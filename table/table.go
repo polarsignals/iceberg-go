@@ -132,7 +132,7 @@ func NewFromLocation(ident Identifier, metalocation string, bucket objstore.Buck
 // SnapshotWriter is an interface for writing a new snapshot to a table.
 type SnapshotWriter interface {
 	// Append accepts a ReaderAt object that should read the Parquet file that is to be added to the snapshot.
-	Append(ctx context.Context, r io.Reader, size int64) error
+	Append(ctx context.Context, r io.Reader) error
 
 	// Close writes the new snapshot to the table and closes the writer. It is an error to call Append after Close.
 	Close(ctx context.Context) error

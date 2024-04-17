@@ -166,6 +166,9 @@ type Catalog interface {
 	// UpdateNamespaceProperties allows removing, adding, and/or updating properties of a namespace
 	UpdateNamespaceProperties(ctx context.Context, namespace table.Identifier,
 		removals []string, updates iceberg.Properties) (PropertiesUpdateSummary, error)
+
+	// CreateTable tells the catalog to create a new table with the given schema and properties
+	CreateTable(ctx context.Context, location string, schema *iceberg.Schema, props iceberg.Properties) (table.Table, error)
 }
 
 const (

@@ -154,6 +154,10 @@ func (c *GlueCatalog) ListNamespaces(ctx context.Context, parent table.Identifie
 	return nil, fmt.Errorf("%w: [Glue Catalog] list namespaces", iceberg.ErrNotImplemented)
 }
 
+func (c *GlueCatalog) CreateTable(ctx context.Context, location string, schema *iceberg.Schema, props iceberg.Properties) (table.Table, error) {
+	return nil, fmt.Errorf("%w: [Glue Catalog] create table", iceberg.ErrNotImplemented)
+}
+
 // GetTable loads a table from the Glue Catalog using the given database and table name.
 func (c *GlueCatalog) getTable(ctx context.Context, database, tableName string) (string, error) {
 	tblRes, err := c.glueSvc.GetTable(ctx,

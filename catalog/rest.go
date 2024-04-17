@@ -711,3 +711,7 @@ func (r *RestCatalog) UpdateNamespaceProperties(ctx context.Context, namespace t
 	return doPost[payload, PropertiesUpdateSummary](ctx, r.baseURI, []string{"namespaces", ns, "properties"},
 		payload{Remove: removals, Updates: updates}, r.cl, map[int]error{http.StatusNotFound: ErrNoSuchNamespace})
 }
+
+func (r *RestCatalog) CreateTable(ctx context.Context, location string, schema *iceberg.Schema, props iceberg.Properties) (table.Table, error) {
+	return nil, fmt.Errorf("%w: [Rest Catalog] create table", iceberg.ErrNotImplemented)
+}

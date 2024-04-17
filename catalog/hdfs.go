@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/polarsignals/iceberg-go"
 	"github.com/polarsignals/iceberg-go/table"
 	"github.com/thanos-io/objstore"
@@ -105,6 +107,21 @@ func (h *hdfs) LoadTable(ctx context.Context, identifier table.Identifier, _ ice
 	return t, nil
 }
 
+func (h *hdfs) CreateTable(ctx context.Context, location string, schema *iceberg.Schema, props iceberg.Properties) (table.Table, error) {
+	// TODO: upload the metadata file to the bucket?
+	metadata := table.NewMetadataV1Builder(
+		location,
+		schema,
+		time.Now().UnixMilli(),
+		schema.NumFields(),
+	).
+		WithTableUUID(uuid.New()).
+		WithCurrentSchemaID(schema.ID).
+		Build()
+
+	return table.NewHDFSTable(0, table.Identifier{location}, metadata, filepath.Join(location, hdfsTableMetadataDir, hdfsMetadataFileName(0)), h.bucket), nil
+}
+
 func (h *hdfs) loadLatestTable(ctx context.Context, identifier table.Identifier, ns, tbl string) (table.Table, error) {
 	v, err := getTableVersion(ctx, h.bucket, ns, tbl)
 	if err != nil {
@@ -116,7 +133,7 @@ func (h *hdfs) loadLatestTable(ctx context.Context, identifier table.Identifier,
 		return nil, err
 	}
 
-	return table.NewHDFSTable(v, identifier, md, filepath.Join(ns, tbl, hdfsTableMetadataDir, hdfsMetadataFileName(md.Version())), h.bucket), nil
+	return table.NewHDFSTable(v, identifier, md, filepath.Join(ns, tbl, hdfsTableMetadataDir, hdfsMetadataFileName(v)), h.bucket), nil
 }
 
 // getTableMetadata returns the metadata of the table at the specified version.

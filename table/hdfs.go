@@ -64,7 +64,7 @@ func (s *hdfsSnapshotWriter) dataDir() string {
 	return filepath.Join(s.table.Location(), dataDirName)
 }
 
-func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader, size int64) error {
+func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	b := &bytes.Buffer{}
 	rdr := io.TeeReader(r, b) // Read file into memory while uploading
 
