@@ -127,10 +127,16 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 		return err
 	}
 
+	seq := int64(1)
+	prev := s.table.CurrentSnapshot()
+	if prev != nil {
+		seq = prev.SequenceNumber + 1
+	}
+
 	// Create snapshot data
 	snapshot := Snapshot{
 		SnapshotID:     s.snapshotID,
-		SequenceNumber: 0, // TODO(thor): Get the sequence number from the previous snapshot
+		SequenceNumber: seq,
 		TimestampMs:    time.Now().UnixMilli(),
 		ManifestList:   manifestListPath,
 		Summary: &Summary{
