@@ -72,7 +72,6 @@ func (s *hdfsSnapshotWriter) dataDir() string {
 	return filepath.Join(s.table.Location(), dataDirName)
 }
 
-// TODO: Append operates in 'merge-schema' mode. Where it will automatically merge the schema of the new data with the existing schema.
 // it might be worth setting this as an option.
 func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	b := &bytes.Buffer{}
@@ -88,6 +87,13 @@ func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	entry, schema, err := iceberg.ManifestEntryV1FromParquet(dataFile, int64(b.Len()), bytes.NewReader(b.Bytes()))
 	if err != nil {
 		return err
+	}
+
+	// If merge schema is disabled; ensure that the schema isn't changing.
+	if !s.options.mergeSchema {
+		if s.schema != nil && !s.schema.Equals(schema) {
+			return fmt.Errorf("schema mismatch: %v != %v", s.schema, schema)
+		}
 	}
 
 	// Merge the schema with the table schema
