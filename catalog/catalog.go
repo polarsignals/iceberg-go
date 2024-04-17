@@ -19,11 +19,8 @@ package catalog
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
-	"net/url"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/polarsignals/iceberg-go"
 	"github.com/polarsignals/iceberg-go/table"
 )
@@ -45,92 +42,6 @@ var (
 	ErrNoSuchNamespace        = errors.New("namespace does not exist")
 	ErrNamespaceAlreadyExists = errors.New("namespace already exists")
 )
-
-// WithAwsConfig sets the AWS configuration for the catalog.
-func WithAwsConfig(cfg aws.Config) Option[GlueCatalog] {
-	return func(o *options) {
-		o.awsConfig = cfg
-	}
-}
-
-func WithCredential(cred string) Option[RestCatalog] {
-	return func(o *options) {
-		o.credential = cred
-	}
-}
-
-func WithOAuthToken(token string) Option[RestCatalog] {
-	return func(o *options) {
-		o.oauthToken = token
-	}
-}
-
-func WithTLSConfig(config *tls.Config) Option[RestCatalog] {
-	return func(o *options) {
-		o.tlsConfig = config
-	}
-}
-
-func WithWarehouseLocation(loc string) Option[RestCatalog] {
-	return func(o *options) {
-		o.warehouseLocation = loc
-	}
-}
-
-func WithMetadataLocation(loc string) Option[RestCatalog] {
-	return func(o *options) {
-		o.metadataLocation = loc
-	}
-}
-
-func WithSigV4() Option[RestCatalog] {
-	return func(o *options) {
-		o.enableSigv4 = true
-		o.sigv4Service = "execute-api"
-	}
-}
-
-func WithSigV4RegionSvc(region, service string) Option[RestCatalog] {
-	return func(o *options) {
-		o.enableSigv4 = true
-		o.sigv4Region = region
-
-		if service == "" {
-			o.sigv4Service = "execute-api"
-		} else {
-			o.sigv4Service = service
-		}
-	}
-}
-
-func WithAuthURI(uri *url.URL) Option[RestCatalog] {
-	return func(o *options) {
-		o.authUri = uri
-	}
-}
-
-func WithPrefix(prefix string) Option[RestCatalog] {
-	return func(o *options) {
-		o.prefix = prefix
-	}
-}
-
-type Option[T GlueCatalog | RestCatalog] func(*options)
-
-type options struct {
-	awsConfig aws.Config
-
-	tlsConfig         *tls.Config
-	credential        string
-	oauthToken        string
-	warehouseLocation string
-	metadataLocation  string
-	enableSigv4       bool
-	sigv4Region       string
-	sigv4Service      string
-	prefix            string
-	authUri           *url.URL
-}
 
 type PropertiesUpdateSummary struct {
 	Removed []string `json:"removed"`

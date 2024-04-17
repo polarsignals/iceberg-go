@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +22,8 @@ var (
 const (
 	hdfsTableMetadataDir = "metadata"
 	hdfsVersionHintFile  = "version-hint.text"
+
+	namespaceSeparator = "\x1F"
 )
 
 func hdfsMetadataFileName(version int) string {
@@ -174,4 +177,13 @@ func getTableVersion(ctx context.Context, bucket objstore.Bucket, ns, tbl string
 	}
 
 	return v, nil
+}
+
+func splitIdentForPath(ident table.Identifier) (string, string, error) {
+	if len(ident) < 1 {
+		return "", "", fmt.Errorf("%w: missing namespace or invalid identifier %v",
+			ErrNoSuchTable, strings.Join(ident, "."))
+	}
+
+	return strings.Join(NamespaceFromIdent(ident), namespaceSeparator), TableNameFromIdent(ident), nil
 }
