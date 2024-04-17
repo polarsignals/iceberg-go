@@ -122,7 +122,10 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 			return err
 		}
 	}
-	if !s.options.fastAppendMode && s.options.manifestSizeBytes > 0 { // If not in fast append mode; check if we can append to the previous manifest file.
+
+	// If not in fast append mode; check if we can append to the previous manifest file.
+	appendMode := false
+	if len(previousManifests) != 0 && !s.options.fastAppendMode && s.options.manifestSizeBytes > 0 {
 		// Check the size of the previous manifest file
 		latest := previousManifests[len(previousManifests)-1]
 		if latest.Length() < int64(s.options.manifestSizeBytes) { // Append to the latest manifest
@@ -131,6 +134,7 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 				return err
 			}
 			manifest = append(previous, s.entries...)
+			appendMode = true
 		}
 	}
 
@@ -152,7 +156,12 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 		AddedFiles(int32(len(s.entries))).
 		ExistingFiles(int32(len(manifest) - len(s.entries))).
 		Build()
-	manifestList := append(previousManifests, newmanifest)
+	var manifestList []iceberg.ManifestFile
+	if appendMode { // Replace the last manifest if we are in append mode
+		manifestList = append(previousManifests[:len(previousManifests)-1], newmanifest)
+	} else {
+		manifestList = append(previousManifests, newmanifest)
+	}
 
 	// Upload the manifest list
 	manifestListFile := fmt.Sprintf("snap-%v-%s%s", s.snapshotID, generateULID(), manifestFileExt)
