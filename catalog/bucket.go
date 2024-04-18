@@ -19,11 +19,11 @@ type icebucket struct {
 }
 
 // NewIcebucket creates a new icebucket with the given prefix and bucket.
-// The prefix is used to strip the full path of the data warehouse from the object name.
-func NewIcebucket(prefix string, bucket objstore.Bucket) *icebucket {
+// The warehouseURI is used to strip the full path of the data warehouse from the object name.
+func NewIcebucket(warehouseURI string, bucket objstore.Bucket) *icebucket {
 	return &icebucket{
 		bucket: bucket,
-		prefix: prefix,
+		prefix: warehouseURI,
 	}
 }
 
