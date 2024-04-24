@@ -1,6 +1,7 @@
 package iceberg
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -58,11 +59,8 @@ func colSizes(f *parquet.File) map[int]int64 {
 
 // maxColValue returns the maximum value of a column in a parquet file.
 func maxColValue(col int, r *parquet.File) []byte {
-	var (
-		maxval                   parquet.Value
-		foundRowGroup, foundPage int
-	)
-	for i, rg := range r.RowGroups() {
+	var maxval parquet.Value
+	for _, rg := range r.RowGroups() {
 		index, err := rg.ColumnChunks()[col].ColumnIndex()
 		if err != nil {
 			return nil
@@ -72,31 +70,58 @@ func maxColValue(col int, r *parquet.File) []byte {
 			v := index.MaxValue(j)
 			if maxval.IsNull() {
 				maxval = v
-				foundPage = j
-				foundRowGroup = i
 				continue
 			}
 
 			if compare(maxval, v) == -1 {
-				foundPage = j
-				foundRowGroup = i
 				maxval = v
 			}
 		}
 	}
 
-	// Find the bytes representation of the max value.
-	numColumns := len(r.Metadata().RowGroups[0].Columns)
-	return r.ColumnIndexes()[(foundRowGroup*numColumns)+col].MaxValues[foundPage]
+	// Create the byte representation of the max value.
+	return binarySingleValueSerialize(maxval)
+}
+
+// https://iceberg.apache.org/spec/#appendix-d-single-value-serialization
+func binarySingleValueSerialize(v parquet.Value) []byte {
+	switch v.Kind() {
+	case parquet.ByteArray:
+		return v.Bytes()
+	case parquet.FixedLenByteArray:
+		return v.Bytes()
+	case parquet.Double:
+		b := make([]byte, 8)
+		binary.LittleEndian.PutUint32(b, uint32(v.Double()))
+		return b
+	case parquet.Int64:
+		b := make([]byte, 8)
+		binary.LittleEndian.PutUint32(b, uint32(v.Int64()))
+		return b
+	case parquet.Int32:
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, uint32(v.Int32()))
+		return b
+	case parquet.Float:
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, uint32(v.Float()))
+		return b
+	case parquet.Boolean:
+		switch v.Boolean() {
+		case true:
+			return []byte{1}
+		default:
+			return []byte{0}
+		}
+	default:
+		panic(fmt.Sprintf("unsupported value comparison: %v", v.Kind()))
+	}
 }
 
 // minColValue returns the minimum value of a column in a parquet file.
 func minColValue(col int, r *parquet.File) []byte {
-	var (
-		minval                   parquet.Value
-		foundRowGroup, foundPage int
-	)
-	for i, rg := range r.RowGroups() {
+	var minval parquet.Value
+	for _, rg := range r.RowGroups() {
 		index, err := rg.ColumnChunks()[col].ColumnIndex()
 		if err != nil {
 			return nil
@@ -106,22 +131,17 @@ func minColValue(col int, r *parquet.File) []byte {
 			v := index.MinValue(j)
 			if minval.IsNull() {
 				minval = v
-				foundPage = j
-				foundRowGroup = i
 				continue
 			}
 
 			if compare(minval, v) == 1 {
-				foundPage = j
-				foundRowGroup = i
 				minval = v
 			}
 		}
 	}
 
-	// Find the bytes representation of the min value.
-	numColumns := len(r.Metadata().RowGroups[0].Columns)
-	return r.ColumnIndexes()[(foundRowGroup*numColumns)+col].MinValues[foundPage]
+	// Create the byte representation of the min value.
+	return binarySingleValueSerialize(minval)
 }
 
 // compares two parquet values. 0 if they are equal, -1 if v1 < v2, 1 if v1 > v2.
