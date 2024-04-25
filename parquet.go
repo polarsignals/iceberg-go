@@ -8,8 +8,8 @@ import (
 	"github.com/parquet-go/parquet-go"
 )
 
-func ManifestEntryV1FromParquet(path string, size int64, r io.ReaderAt) (ManifestEntry, *Schema, error) {
-	df, schema, err := DataFileFromParquet(path, size, r)
+func ManifestEntryV1FromParquet(path string, size int64, schema *Schema, r io.ReaderAt) (ManifestEntry, *Schema, error) {
+	df, schema, err := DataFileFromParquet(path, size, schema, r)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -17,8 +17,12 @@ func ManifestEntryV1FromParquet(path string, size int64, r io.ReaderAt) (Manifes
 	return NewManifestEntryV1(EntryStatusADDED, size, df), schema, nil
 }
 
-func DataFileFromParquet(path string, size int64, r io.ReaderAt) (DataFile, *Schema, error) {
+func DataFileFromParquet(path string, size int64, schema *Schema, r io.ReaderAt) (DataFile, *Schema, error) {
 	f, err := parquet.OpenFile(r, size)
+	if err != nil {
+		return nil, nil, err
+	}
+	latestSchema, err := schema.Merge(parquetSchemaToIcebergSchema(-1, f.Schema()))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -32,11 +36,16 @@ func DataFileFromParquet(path string, size int64, r io.ReaderAt) (DataFile, *Sch
 	)
 
 	// Create the upper and lower bounds for each column.
-	numColumns := len(f.Metadata().RowGroups[0].Columns)
+	numColumns := latestSchema.NumFields()
 	upper, lower := make(map[int][]byte, numColumns), make(map[int][]byte, numColumns)
 	for i := 0; i < numColumns; i++ {
-		upper[i] = maxColValue(i, f)
-		lower[i] = minColValue(i, f)
+		// Check if this columns exists in the parquet file. If it does add the upper and lower bounds.
+		// If it doesn't exist, then the bounds will be nil.
+		col, ok := f.Schema().Lookup(latestSchema.Fields()[i].Name)
+		if ok {
+			upper[i] = maxColValue(col.ColumnIndex, f)
+			lower[i] = minColValue(col.ColumnIndex, f)
+		}
 	}
 
 	bldr.WithLowerBounds(lower)
@@ -44,7 +53,7 @@ func DataFileFromParquet(path string, size int64, r io.ReaderAt) (DataFile, *Sch
 	bldr.WithColumnSizes(colSizes(f))
 
 	// Create the schema.
-	return bldr.Build(), parquetSchemaToIcebergSchema(-1, f.Schema()), nil
+	return bldr.Build(), latestSchema, nil
 }
 
 func colSizes(f *parquet.File) map[int]int64 {

@@ -86,7 +86,7 @@ func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	}
 
 	// Create manifest entry
-	entry, schema, err := iceberg.ManifestEntryV1FromParquet(dataFile, int64(b.Len()), bytes.NewReader(b.Bytes()))
+	entry, schema, err := iceberg.ManifestEntryV1FromParquet(dataFile, int64(b.Len()), s.schema, bytes.NewReader(b.Bytes()))
 	if err != nil {
 		return err
 	}
