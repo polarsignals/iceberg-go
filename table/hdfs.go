@@ -232,6 +232,16 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 		return err
 	}
 
+	// Delete stale metadata files
+	if s.options.metadataDeleteAfterCommit {
+		staleMetadataFiles := []string{} // TODO
+		for _, file := range staleMetadataFiles {
+			if err := s.bucket.Delete(ctx, file); err != nil {
+				return fmt.Errorf("failed to delete stale metadata file %s: %w", file, err)
+			}
+		}
+	}
+
 	return nil
 }
 
