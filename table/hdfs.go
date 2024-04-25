@@ -110,6 +110,13 @@ func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 				return err
 			}
 		}
+
+		// TODO(thor)Update the partition spec if the schema has changed so that the spec ID's match the new field IDs
+		if s.schema.ID != s.table.Metadata().CurrentSchema().ID {
+			spec := s.table.Metadata().PartitionSpec()
+			fmt.Println("Updating partition spec", spec)
+		}
+
 	}
 
 	s.entries = append(s.entries, entry)
@@ -133,6 +140,7 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 	}
 
 	// If not in fast append mode; check if we can append to the previous manifest file.
+	// TODO(thor): we also can't append a manifest if the schem has changed.
 	appendMode := false
 	if len(previousManifests) != 0 && !s.options.fastAppendMode && s.options.manifestSizeBytes > 0 {
 		// Check the size of the previous manifest file
@@ -149,7 +157,7 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 
 	// Write the manifest file
 	if err := s.uploadManifest(ctx, path, func(ctx context.Context, w io.Writer) error {
-		return iceberg.WriteManifestV1(w, manifest)
+		return iceberg.WriteManifestV1(w, s.schema, manifest)
 	}); err != nil {
 		return err
 	}
