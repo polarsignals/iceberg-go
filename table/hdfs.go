@@ -45,6 +45,7 @@ func (t *hdfsTable) SnapshotWriter(options ...WriterOption) (SnapshotWriter, err
 		version:    t.version,
 		table:      t,
 		schema:     t.metadata.CurrentSchema(),
+		spec:       t.metadata.PartitionSpec(),
 	}
 
 	for _, options := range options {
@@ -62,6 +63,7 @@ type hdfsSnapshotWriter struct {
 	options    writerOptions
 
 	schema  *iceberg.Schema
+	spec    iceberg.PartitionSpec
 	entries []iceberg.ManifestEntry
 }
 
@@ -96,27 +98,30 @@ func (s *hdfsSnapshotWriter) Append(ctx context.Context, r io.Reader) error {
 		if s.schema != nil && !s.schema.Equals(schema) {
 			return fmt.Errorf("schema mismatch: %v != %v", s.schema, schema)
 		}
-	} else {
+	}
 
-		// Merge the schema with the table schema
-		if s.schema == nil {
-			s.schema, err = s.table.Metadata().CurrentSchema().Merge(schema)
-			if err != nil {
-				return err
+	s.schema = schema
+
+	// Update the partition spec if the schema has changed so that the spec ID's match the new field IDs
+	if s.schema.ID != s.table.Metadata().CurrentSchema().ID {
+		spec := s.table.Metadata().PartitionSpec()
+		if !spec.IsUnpartitioned() {
+			updatedFields := make([]iceberg.PartitionField, 0, spec.NumFields())
+			for i := 0; i < spec.NumFields(); i++ {
+				field := spec.Field(i)
+				schemaField, ok := s.schema.FindFieldByName(field.Name)
+				if !ok {
+					return fmt.Errorf("partition field %s not found in schema", field.Name)
+				}
+
+				updatedFields = append(updatedFields, iceberg.PartitionField{
+					SourceID:  schemaField.ID,
+					Name:      field.Name,
+					Transform: field.Transform,
+				})
 			}
-		} else {
-			s.schema, err = s.schema.Merge(schema)
-			if err != nil {
-				return err
-			}
+			s.spec = iceberg.NewPartitionSpec(updatedFields...)
 		}
-
-		// TODO(thor)Update the partition spec if the schema has changed so that the spec ID's match the new field IDs
-		if s.schema.ID != s.table.Metadata().CurrentSchema().ID {
-			spec := s.table.Metadata().PartitionSpec()
-			fmt.Println("Updating partition spec", spec)
-		}
-
 	}
 
 	s.entries = append(s.entries, entry)
@@ -174,8 +179,8 @@ func (s *hdfsSnapshotWriter) Close(ctx context.Context) error {
 		ExistingFiles(int32(len(manifest) - len(s.entries)))
 
 	// Add partition information if the table is partitioned
-	if spec := s.table.Metadata().PartitionSpec(); !spec.IsUnpartitioned() {
-		bldr.Partitions(summarizeFields(spec, s.entries))
+	if !s.spec.IsUnpartitioned() {
+		bldr.Partitions(summarizeFields(s.spec, s.entries))
 	}
 
 	newmanifest := bldr.Build()
@@ -264,7 +269,7 @@ func (s *hdfsSnapshotWriter) addSnapshot(ctx context.Context, t Table, snapshot 
 		WithCurrentSchemaID(schema.ID).
 		WithCurrentSnapshotID(snapshot.SnapshotID).
 		WithSnapshots(append(snapshots, snapshot)).
-		WithPartitionSpecs([]iceberg.PartitionSpec{spec}).
+		WithPartitionSpecs([]iceberg.PartitionSpec{s.spec}).
 		WithDefaultSpecID((&spec).ID()).
 		Build(), nil
 }
