@@ -90,11 +90,9 @@ func (s *snapshotWriter) Append(ctx context.Context, r io.Reader) error {
 	return nil
 }
 
+// Close will write out all the metadata files to the bucket and commit the snapshot to the table.
+// Close is an atomic operation and will either succeed or fail and none of the changes made to the table will be committed.
 func (s *snapshotWriter) Close(ctx context.Context) error {
-
-	// Upload the manifest file
-	manifestFile := fmt.Sprintf("%s%s", generateULID(), manifestFileExt)
-	path := filepath.Join(s.metadataDir(), manifestFile)
 	manifest := s.entries
 	currentSnapshot := s.table.CurrentSnapshot()
 	var previousManifests []iceberg.ManifestFile
@@ -122,31 +120,11 @@ func (s *snapshotWriter) Close(ctx context.Context) error {
 		}
 	}
 
-	// Write the manifest file
-	n, err := s.uploadManifest(ctx, path, func(ctx context.Context, w io.Writer) error {
-		return iceberg.WriteManifestV1(w, s.schema, manifest)
-	})
+	newmanifest, err := s.createNewManifestFile(ctx, manifest)
 	if err != nil {
 		return err
 	}
 
-	rows := int64(0)
-	for _, entry := range s.entries {
-		rows += entry.DataFile().Count()
-	}
-
-	// Create manifest list
-	bldr := iceberg.NewManifestV1Builder(path, int64(n), 0, s.snapshotID).
-		AddedRows(rows).
-		AddedFiles(int32(len(s.entries))).
-		ExistingFiles(int32(len(manifest) - len(s.entries)))
-
-	// Add partition information if the table is partitioned
-	if !s.spec.IsUnpartitioned() {
-		bldr.Partitions(summarizeFields(s.spec, s.schema, manifest))
-	}
-
-	newmanifest := bldr.Build()
 	var manifestList []iceberg.ManifestFile
 	if appendMode { // Replace the last manifest if we are in append mode
 		manifestList = append(previousManifests[:len(previousManifests)-1], newmanifest)
@@ -177,14 +155,8 @@ func (s *snapshotWriter) Close(ctx context.Context) error {
 		return err
 	}
 
-	// Upload the metadata
-	path = filepath.Join(s.metadataDir(), fmt.Sprintf("v%v.metadata%s", s.version+1, metadataFileExt))
-	js, err := json.Marshal(md)
-	if err != nil {
-		return err
-	}
-
-	if err := s.bucket.Upload(ctx, path, bytes.NewReader(js)); err != nil {
+	// Write the new metadata file
+	if err := s.createNewMetadataFile(ctx, md); err != nil {
 		return err
 	}
 
@@ -196,6 +168,53 @@ func (s *snapshotWriter) Close(ctx context.Context) error {
 	// Cleanup stale snapshot files and metadata files (if configured)
 	s.cleanup(ctx, staleMetadataFiles, staleSnapshots, md)
 	return nil
+}
+
+// createNewMetadataFile marshals the metadata and uploads it to the bucket under the name v{version}.metadata.json
+func (s *snapshotWriter) createNewMetadataFile(ctx context.Context, metadata Metadata) error {
+	path := filepath.Join(s.metadataDir(), fmt.Sprintf("v%v.metadata%s", s.version+1, metadataFileExt))
+	js, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+
+	if err := s.bucket.Upload(ctx, path, bytes.NewReader(js)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createNewManifestFile creates a new manifest file from the given manifest entries and uploads it to the bucket.
+func (s *snapshotWriter) createNewManifestFile(ctx context.Context, manifestEntries []iceberg.ManifestEntry) (iceberg.ManifestFile, error) {
+	manifestFile := fmt.Sprintf("%s%s", generateULID(), manifestFileExt)
+	path := filepath.Join(s.metadataDir(), manifestFile)
+
+	// Write the manifest file
+	n, err := s.uploadManifest(ctx, path, func(ctx context.Context, w io.Writer) error {
+		return iceberg.WriteManifestV1(w, s.schema, manifestEntries)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rows := int64(0)
+	for _, entry := range s.entries {
+		rows += entry.DataFile().Count()
+	}
+
+	// Create manifest list
+	bldr := iceberg.NewManifestV1Builder(path, int64(n), 0, s.snapshotID).
+		AddedRows(rows).
+		AddedFiles(int32(len(s.entries))).
+		ExistingFiles(int32(len(manifestEntries) - len(s.entries)))
+
+	// Add partition information if the table is partitioned
+	if !s.spec.IsUnpartitioned() {
+		bldr.Partitions(summarizeFields(s.spec, s.schema, manifestEntries))
+	}
+
+	return bldr.Build(), nil
 }
 
 func (s *snapshotWriter) cleanup(ctx context.Context, metadataFiles []string, staleSnapshots []Snapshot, md Metadata) {
