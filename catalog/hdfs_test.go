@@ -352,4 +352,32 @@ func Test_HDFS(t *testing.T) {
 
 		require.True(t, found)
 	})
+
+	t.Run("DeleteOrphanFiles", func(t *testing.T) {
+		// Orphan a data file; expect the DeleteOrphanFiles function to remove it
+		w, err := tbl.SnapshotWriter(
+			table.WithManifestSizeBytes(1024*1024),
+			table.WithExpireSnapshotsOlderThan(time.Nanosecond), // This will ensure no snapshots hold onto this data file and actually orphan it
+		)
+		require.NoError(t, err)
+		i := 0
+		deleted := ""
+		w.DeleteDataFile(ctx, func(file iceberg.DataFile) bool {
+			i++
+			if i == 1 {
+				deleted = file.FilePath()
+			}
+			return i == 1
+		})
+		require.NoError(t, w.Close(ctx))
+
+		tbl, err = catalog.LoadTable(ctx, []string{tablePath}, iceberg.Properties{})
+		require.NoError(t, err)
+		require.NoError(t, table.DeleteOrphanFiles(ctx, tbl, time.Nanosecond))
+
+		require.NoError(t, tbl.Bucket().Iter(ctx, "", func(name string) error {
+			require.NotEqual(t, deleted, name)
+			return nil
+		}, objstore.WithRecursiveIter))
+	})
 }
