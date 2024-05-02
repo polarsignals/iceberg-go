@@ -135,6 +135,9 @@ type SnapshotWriter interface {
 	// Append accepts a ReaderAt object that should read the Parquet file that is to be added to the snapshot.
 	Append(ctx context.Context, r io.Reader) error
 
+	// DeleteDataFile deletes a data file from the table. The function passed to this method should return true if the file should be deleted.
+	DeleteDataFile(ctx context.Context, del func(file iceberg.DataFile) bool) error
+
 	// Close writes the new snapshot to the table and closes the writer. It is an error to call Append after Close.
 	Close(ctx context.Context) error
 }

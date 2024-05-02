@@ -213,4 +213,143 @@ func Test_HDFS(t *testing.T) {
 		_, err = bucket.Attributes(ctx, file)
 		require.True(t, bucket.IsObjNotFoundErr(err))
 	})
+
+	t.Run("DeleteDataFiles", func(t *testing.T) {
+		w, err := tbl.SnapshotWriter()
+		require.NoError(t, err)
+
+		// Just delete a single data file
+		i := 0
+		var deleted iceberg.DataFile
+		w.DeleteDataFile(ctx, func(file iceberg.DataFile) bool {
+			i++
+			if i == 1 {
+				deleted = file
+			}
+			return i == 1
+		})
+
+		require.NoError(t, w.Close(ctx))
+
+		// Check to make sure the data is gone
+		tbl, err = catalog.LoadTable(ctx, []string{tablePath}, iceberg.Properties{})
+		require.NoError(t, err)
+
+		snap := tbl.CurrentSnapshot()
+		manifests, err := snap.Manifests(bucket)
+		require.NoError(t, err)
+
+		for _, manifest := range manifests {
+			entries, _, err := manifest.FetchEntries(bucket, false)
+			require.NoError(t, err)
+
+			for _, entry := range entries {
+				require.NotEqual(t, deleted.FilePath(), entry.DataFile().FilePath())
+			}
+		}
+	})
+
+	t.Run("DeleteWithWrite", func(t *testing.T) {
+		w, err := tbl.SnapshotWriter()
+		require.NoError(t, err)
+
+		// Just delete a single data file
+		i := 0
+		var deleted iceberg.DataFile
+		w.DeleteDataFile(ctx, func(file iceberg.DataFile) bool {
+			i++
+			if i == 1 {
+				deleted = file
+			}
+			return i == 1
+		})
+
+		// Write a new data file
+		b := &bytes.Buffer{}
+		err = parquet.Write(b, []RowType{
+			{FirstName: "Bartholomew"},
+		})
+		require.NoError(t, err)
+		require.NoError(t, w.Append(ctx, b))
+
+		require.NoError(t, w.Close(ctx))
+
+		tbl, err = catalog.LoadTable(ctx, []string{tablePath}, iceberg.Properties{})
+		require.NoError(t, err)
+
+		snap := tbl.CurrentSnapshot()
+		manifests, err := snap.Manifests(bucket)
+		require.NoError(t, err)
+
+		found := false
+		for _, manifest := range manifests {
+			entries, _, err := manifest.FetchEntries(bucket, false)
+			require.NoError(t, err)
+
+			for _, entry := range entries {
+				// Check to make sure the data is gone
+				require.NotEqual(t, deleted.FilePath(), entry.DataFile().FilePath())
+				// Check to make sure the new data is there
+				if "Bartholomew" == string(entry.DataFile().LowerBoundValues()[0]) {
+					found = true
+				}
+			}
+		}
+
+		require.True(t, found)
+	})
+
+	t.Run("DeleteWriteSameManifest", func(t *testing.T) {
+		w, err := tbl.SnapshotWriter(
+			table.WithManifestSizeBytes(1024 * 1024),
+		)
+		require.NoError(t, err)
+
+		manifests, err := tbl.CurrentSnapshot().Manifests(bucket)
+		require.NoError(t, err)
+
+		latest := manifests[len(manifests)-1]
+		latestEntries, _, err := latest.FetchEntries(bucket, false)
+		require.NoError(t, err)
+
+		// Pick a data file from the latest manifest to delete
+		deleted := latestEntries[0].DataFile()
+		w.DeleteDataFile(ctx, func(file iceberg.DataFile) bool {
+			return file.FilePath() == deleted.FilePath()
+		})
+
+		// Write a new data file expecting it to be appended to the manifest we just deleted from
+		b := &bytes.Buffer{}
+		err = parquet.Write(b, []RowType{
+			{FirstName: "Scooby"},
+		})
+		require.NoError(t, err)
+		require.NoError(t, w.Append(ctx, b))
+
+		require.NoError(t, w.Close(ctx))
+
+		tbl, err = catalog.LoadTable(ctx, []string{tablePath}, iceberg.Properties{})
+		require.NoError(t, err)
+
+		snap := tbl.CurrentSnapshot()
+		manifests, err = snap.Manifests(bucket)
+		require.NoError(t, err)
+
+		found := false
+		for _, manifest := range manifests {
+			entries, _, err := manifest.FetchEntries(bucket, false)
+			require.NoError(t, err)
+
+			for _, entry := range entries {
+				// Check to make sure the data is gone
+				require.NotEqual(t, deleted.FilePath(), entry.DataFile().FilePath())
+				// Check to make sure the new data is there
+				if "Scooby" == string(entry.DataFile().LowerBoundValues()[0]) {
+					found = true
+				}
+			}
+		}
+
+		require.True(t, found)
+	})
 }

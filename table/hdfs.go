@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math/rand"
 	"path/filepath"
 
 	"github.com/thanos-io/objstore"
@@ -33,23 +32,8 @@ func NewHDFSTable(ver int, ident Identifier, meta Metadata, location string, buc
 }
 
 func (t *hdfsTable) SnapshotWriter(options ...WriterOption) (SnapshotWriter, error) {
-	writer := &hdfsSnapshotWriter{
-		snapshotWriter: snapshotWriter{
-			options:    writerOptions{},
-			snapshotID: rand.Int63(),
-			bucket:     t.bucket,
-			version:    t.version,
-			table:      t,
-			schema:     t.metadata.CurrentSchema(),
-			spec:       t.metadata.PartitionSpec(),
-		},
-	}
-
-	for _, options := range options {
-		options(&writer.options)
-	}
-
-	writer.snapshotWriter.commit = writer.commit
+	writer := &hdfsSnapshotWriter{}
+	writer.snapshotWriter = NewSnapshotWriter(writer.commit, t.version, t.bucket, t, options...)
 	return writer, nil
 }
 
