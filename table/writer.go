@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"path/filepath"
 	"time"
 
@@ -27,7 +28,32 @@ type snapshotWriter struct {
 	schemaChanged bool
 	schema        *iceberg.Schema
 	spec          iceberg.PartitionSpec
-	entries       []iceberg.ManifestEntry
+
+	// entries are the new entries that have been added to the table during the write operation.
+	entries []iceberg.ManifestEntry
+
+	// modifiedManifests is the set of manifests that need to be written due to modification during write operations.
+	modifiedManifests map[string][]iceberg.ManifestEntry
+}
+
+func NewSnapshotWriter(commit func(ctx context.Context, v int) error, version int, bucket objstore.Bucket, table Table, options ...WriterOption) snapshotWriter {
+	w := snapshotWriter{
+		commit:            commit,
+		version:           version,
+		snapshotID:        rand.Int63(),
+		bucket:            bucket,
+		table:             table,
+		options:           writerOptions{},
+		schema:            table.Metadata().CurrentSchema(),
+		spec:              table.Metadata().PartitionSpec(),
+		modifiedManifests: map[string][]iceberg.ManifestEntry{},
+	}
+
+	for _, opt := range options {
+		opt(&w.options)
+	}
+
+	return w
 }
 
 func (s *snapshotWriter) metadataDir() string {
@@ -111,32 +137,65 @@ func (s *snapshotWriter) Close(ctx context.Context) error {
 		// Check the size of the previous manifest file
 		latest := previousManifests[len(previousManifests)-1]
 		if latest.Length() < int64(s.options.manifestSizeBytes) { // Append to the latest manifest
-			previous, _, err := latest.FetchEntries(s.bucket, false)
-			if err != nil {
-				return err
+
+			// If the manifest was modified use the modified manifest instead of reading the entries
+			if m, ok := s.modifiedManifests[latest.FilePath()]; ok {
+				manifest = append(m, s.entries...)
+			} else {
+				previous, _, err := latest.FetchEntries(s.bucket, false)
+				if err != nil {
+					return err
+				}
+				manifest = append(previous, s.entries...)
 			}
-			manifest = append(previous, s.entries...)
 			appendMode = true
+			s.modifiedManifests[latest.FilePath()] = manifest
 		}
 	}
 
-	newmanifest, err := s.createNewManifestFile(ctx, manifest)
-	if err != nil {
-		return err
+	// Create new manifests from the modified manifests
+	for name, manifest := range s.modifiedManifests {
+		if len(manifest) == 0 { // All the data files were removed from the manifest
+			// Remove the manifest from the previous manifests
+			for i, m := range previousManifests {
+				if m.FilePath() == name {
+					previousManifests = append(previousManifests[:i], previousManifests[i+1:]...)
+					break
+				}
+			}
+			continue
+		}
+
+		// Write the modified manifest
+		newManifest, err := s.createNewManifestFile(ctx, manifest)
+		if err != nil {
+			return err
+		}
+
+		// Replace the previous manifest with the modified manifest
+		for i, m := range previousManifests {
+			if m.FilePath() == name {
+				previousManifests[i] = newManifest
+				break
+			}
+		}
 	}
 
-	var manifestList []iceberg.ManifestFile
-	if appendMode { // Replace the last manifest if we are in append mode
-		manifestList = append(previousManifests[:len(previousManifests)-1], newmanifest)
-	} else {
-		manifestList = append(previousManifests, newmanifest)
+	// New entries were not appended to an existing manifest; create a new one
+	if !appendMode && len(manifest) > 0 {
+		newmanifest, err := s.createNewManifestFile(ctx, manifest)
+		if err != nil {
+			return err
+		}
+
+		previousManifests = append(previousManifests, newmanifest)
 	}
 
 	// Upload the manifest list
 	manifestListFile := fmt.Sprintf("snap-%v-%s%s", s.snapshotID, generateULID(), manifestFileExt)
 	manifestListPath := filepath.Join(s.metadataDir(), manifestListFile)
 	if _, err := s.uploadManifest(ctx, manifestListPath, func(ctx context.Context, w io.Writer) error {
-		return iceberg.WriteManifestListV1(w, manifestList)
+		return iceberg.WriteManifestListV1(w, previousManifests)
 	}); err != nil {
 		return err
 	}
@@ -454,4 +513,32 @@ func compare(a, b []byte, typ iceberg.Type) int {
 	default:
 		panic(fmt.Sprintf("unsupported type %v", typ))
 	}
+}
+
+func (s *snapshotWriter) DeleteDataFile(ctx context.Context, del func(file iceberg.DataFile) bool) error {
+	snapshot := s.table.CurrentSnapshot()
+	list, err := snapshot.Manifests(s.bucket)
+	if err != nil {
+		return fmt.Errorf("error reading manifest list: %w", err)
+	}
+
+	for _, manifest := range list {
+		entries, _, err := manifest.FetchEntries(s.bucket, false)
+		if err != nil {
+			return fmt.Errorf("fetch entries %s: %w", manifest.FilePath(), err)
+		}
+
+		newManifest := make([]iceberg.ManifestEntry, 0, len(entries))
+		for _, e := range entries {
+			if !del(e.DataFile()) {
+				newManifest = append(newManifest, e)
+			}
+		}
+
+		// Manifest was modified
+		if len(newManifest) != len(entries) {
+			s.modifiedManifests[manifest.FilePath()] = newManifest
+		}
+	}
+	return nil
 }
