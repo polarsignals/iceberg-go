@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/polarsignals/iceberg-go"
 	"github.com/thanos-io/objstore"
@@ -38,12 +39,14 @@ type snapshotWriter struct {
 
 func NewSnapshotWriter(commit func(ctx context.Context, v int) error, version int, bucket objstore.Bucket, table Table, options ...WriterOption) snapshotWriter {
 	w := snapshotWriter{
-		commit:            commit,
-		version:           version,
-		snapshotID:        rand.Int63(),
-		bucket:            bucket,
-		table:             table,
-		options:           writerOptions{},
+		commit:     commit,
+		version:    version,
+		snapshotID: rand.Int63(),
+		bucket:     bucket,
+		table:      table,
+		options: writerOptions{
+			logger: log.NewNopLogger(),
+		},
 		schema:            table.Metadata().CurrentSchema(),
 		spec:              table.Metadata().PartitionSpec(),
 		modifiedManifests: map[string][]iceberg.ManifestEntry{},
