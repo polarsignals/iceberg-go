@@ -2,6 +2,7 @@ package table
 
 import (
 	"context"
+	"path/filepath"
 	"regexp"
 	"time"
 
@@ -21,14 +22,16 @@ var (
 // "It is dangerous to remove orphan files with a retention interval shorter than the time expected for any write to complete because it might corrupt
 // the table if in-progress files are considered orphaned and are deleted. The default interval is 3 days."
 func DeleteOrphanFiles(ctx context.Context, table Table, age time.Duration) error {
-	foundFiles := make(map[string]struct{})
+	foundFiles := map[string]struct{}{
+		filepath.Base(table.MetadataLocation()): {},
+	}
 
 	for _, logEntry := range table.Metadata().GetMetadataLog() {
-		foundFiles[logEntry.MetadataFile] = struct{}{} // Record the metadata files that are still referenced
+		foundFiles[filepath.Base(logEntry.MetadataFile)] = struct{}{} // Record the metadata files that are still referenced
 	}
 
 	for _, snapshot := range table.Metadata().Snapshots() {
-		foundFiles[snapshot.ManifestList] = struct{}{} // Record the manifest list file from each snapshot
+		foundFiles[filepath.Base(snapshot.ManifestList)] = struct{}{} // Record the manifest list file from each snapshot
 		manifests, err := snapshot.Manifests(table.Bucket())
 		if err != nil {
 			return err
@@ -36,7 +39,7 @@ func DeleteOrphanFiles(ctx context.Context, table Table, age time.Duration) erro
 
 		// Record the manifest file from each list
 		for _, manifest := range manifests {
-			foundFiles[manifest.FilePath()] = struct{}{}
+			foundFiles[filepath.Base(manifest.FilePath())] = struct{}{}
 
 			// Record the data files from each manifest
 			entries, _, err := manifest.FetchEntries(table.Bucket(), false)
@@ -45,13 +48,13 @@ func DeleteOrphanFiles(ctx context.Context, table Table, age time.Duration) erro
 			}
 
 			for _, entry := range entries {
-				foundFiles[entry.DataFile().FilePath()] = struct{}{}
+				foundFiles[filepath.Base(entry.DataFile().FilePath())] = struct{}{}
 			}
 		}
 	}
 
-	return table.Bucket().Iter(ctx, "", func(file string) error {
-		if _, ok := foundFiles[file]; !ok {
+	return table.Bucket().Iter(ctx, table.Location(), func(file string) error {
+		if _, ok := foundFiles[filepath.Base(file)]; !ok {
 			// If the file is not found in the list of referenced files and it's old enough AND it's a deletable file, delete it
 			if !isDeletable(file) {
 				return nil
